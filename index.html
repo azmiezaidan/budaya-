@@ -1,0 +1,182 @@
+/* ==========================================================
+   SSAS Visit Guide – script.js
+   Fitur: routing antar halaman, kalender & filter kegiatan,
+          subscribe email, QR code, salin tautan.
+   Catatan: butuh library QRCode (qrcodejs) dimuat SEBELUM file ini:
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+   <script src="script.js"></script>
+   ========================================================== */
+
+// ---------- Helper ----------
+const $ = (id) => document.getElementById(id);
+const dateKey = ([y, m, d]) => y * 10000 + m * 100 + d; // contoh: 2025-11-20 -> 20251120
+
+// ---------- Data kegiatan (What's On) ----------
+const EVENTS = [
+  {
+    title: "Ruang di Antara",
+    by: "by Studio Pelita",
+    category: "Exhibitions",
+    label: "EXHIBITION",
+    start: [2025, 10, 16],
+    end: [2025, 11, 30],
+    dateText: "16 Oct – 30 Nov 2025",
+    place: "Selasar Sunaryo Art Space",
+    gradient: "linear-gradient(135deg,#2b221c,#c9a57a)",
+  },
+  {
+    title: "Ceramic Workshop: Membentuk Cerita",
+    by: "",
+    category: "Programs",
+    label: "PROGRAM",
+    start: [2025, 11, 22],
+    end: [2025, 11, 22],
+    dateText: "22 Nov 2025",
+    place: "Ruang Workshop SSAS",
+    gradient: "linear-gradient(135deg,#d9c7b3,#8a6a50)",
+  },
+  {
+    title: "Diskusi Seni: Ruang dan Waktu",
+    by: "",
+    category: "Community",
+    label: "COMMUNITY EVENT",
+    start: [2025, 11, 29],
+    end: [2025, 11, 29],
+    dateText: "29 Nov 2025",
+    place: "Ruang Diskusi SSAS",
+    gradient: "linear-gradient(135deg,#3a1c1c,#b01c20)",
+  },
+];
+
+const CATEGORIES = ["All Events", "Exhibitions", "Programs", "Community"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+let activeCategory = "All Events";
+let selectedDay = null; // tanggal (1–30) di November 2025, atau null
+
+// ---------- Render halaman What's On ----------
+function renderChips() {
+  $("chips").innerHTML = CATEGORIES.map(
+    (c) =>
+      `<button class="chip${c === activeCategory ? " on" : ""}" data-c="${c}">${c}</button>`
+  ).join("");
+}
+
+function renderDays() {
+  let html = "";
+  for (let day = 1; day <= 30; day++) {
+    const k = 20251100 + day;
+    const hasEvent = EVENTS.some((e) => dateKey(e.start) <= k && dateKey(e.end) >= k);
+    const weekday = WEEKDAYS[new Date(2025, 10, day).getDay()];
+    html += `<div class="day${hasEvent ? " dot" : ""}${selectedDay === day ? " on" : ""}" data-d="${day}">
+               ${weekday}<b>${day}</b>
+             </div>`;
+  }
+  $("days").innerHTML = html;
+}
+
+function renderEvents() {
+  const list = EVENTS.filter((e) => {
+    if (activeCategory !== "All Events" && e.category !== activeCategory) return false;
+    if (selectedDay) {
+      const k = 20251100 + selectedDay;
+      if (!(dateKey(e.start) <= k && dateKey(e.end) >= k)) return false;
+    }
+    return true;
+  });
+
+  $("events").innerHTML = list
+    .map(
+      (e) => `
+      <div class="card ev">
+        <div class="thumb" style="background:${e.gradient}"></div>
+        <div class="tagc">${e.label}</div>
+        <h3 style="font-size:26px">${e.title}</h3>
+        ${e.by ? `<p class="meta">${e.by}</p>` : ""}
+        <p class="meta">🗓 ${e.dateText}</p>
+        <p class="meta">📍 ${e.place}</p>
+      </div>`
+    )
+    .join("");
+
+  $("empty").style.display = list.length ? "none" : "block";
+}
+
+function render() {
+  renderChips();
+  renderDays();
+  renderEvents();
+}
+
+// ---------- Klik kategori & tanggal ----------
+document.addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-c]");
+  if (chip) {
+    activeCategory = chip.dataset.c;
+    render();
+  }
+
+  const day = e.target.closest("[data-d]");
+  if (day) {
+    const value = Number(day.dataset.d);
+    selectedDay = selectedDay === value ? null : value; // klik lagi = batal pilih
+    render();
+  }
+});
+
+// ---------- Subscribe email ----------
+$("subbtn").addEventListener("click", () => {
+  const email = $("mail").value.trim();
+  const valid = /\S+@\S+\.\S+/.test(email);
+  $("subok").textContent = valid
+    ? `Terima kasih! Kami akan mengirim kabar terbaru ke ${email}.`
+    : "Mohon masukkan alamat email yang valid.";
+});
+
+// ---------- Routing antar halaman (berbasis #hash) ----------
+function route() {
+  let view = (location.hash || "#home").slice(1);
+  if (!$("v-" + view)) view = "home";
+
+  document.querySelectorAll(".view").forEach((el) => {
+    el.classList.toggle("on", el.id === "v-" + view);
+  });
+  document.querySelectorAll("#nav a").forEach((a) => {
+    a.classList.toggle("on", a.dataset.v === view);
+  });
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", route);
+
+// ---------- QR code & salin tautan ----------
+const pageUrl = () => location.href.split("#")[0];
+
+function makeQR() {
+  try {
+    new QRCode($("qr"), {
+      text: pageUrl(),
+      width: 132,
+      height: 132,
+      colorDark: "#8b0e12",
+      colorLight: "#ffffff",
+    });
+  } catch (err) {
+    $("qr").textContent = "QR tidak tersedia";
+  }
+}
+
+$("copy").addEventListener("click", function () {
+  const btn = this;
+  try {
+    navigator.clipboard.writeText(pageUrl()).then(() => {
+      btn.textContent = "Tersalin ✓";
+    });
+  } catch (err) {
+    btn.textContent = "Salin manual dari address bar";
+  }
+});
+
+// ---------- Jalankan saat halaman dimuat ----------
+route();
+render();
+makeQR();
